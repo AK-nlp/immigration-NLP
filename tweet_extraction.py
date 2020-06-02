@@ -41,31 +41,38 @@ def extract_from_file(tweet_filename, keywords):
     :param keywords:
     :return:
     """
-    tweet_id_arr = []
-    created_at_arr = []
-    lang_arr = []
-    full_text_arr = []
-    usr_id_arr = []
-    screen_name_arr = []
+    try:
+        tweet_id_arr = []
+        created_at_arr = []
+        lang_arr = []
+        full_text_arr = []
+        usr_id_arr = []
+        screen_name_arr = []
 
-    infile = open(tweet_filename, 'rb')
-    user_tweets = pickle.load(infile)
-    for user, tweets in user_tweets.items():
-        for tweet in tweets:
-            tweet_id_arr.append(tweet['id'])
-            usr_id_arr.append(tweet['user']['id'])
-            screen_name_arr.append(tweet['user']['screen_name'])
-            lang_arr.append(tweet['lang'])
-            created_at_arr.append(tweet['created_at'])
-            full_text_arr.append(tweet['full_text'])
-    infile.close
+        infile = open(tweet_filename, 'rb')
+        user_tweets = pickle.load(infile)
+        for user, tweets in user_tweets.items():
+            if tweets == 'No result':  # particular case when we cannot crawl tweets from this user
+                continue
+            for tweet in tweets:
+                tweet_id_arr.append(tweet['id'])
+                usr_id_arr.append(tweet['user']['id'])
+                screen_name_arr.append(tweet['user']['screen_name'])
+                lang_arr.append(tweet['lang'])
+                created_at_arr.append(tweet['created_at'])
+                full_text_arr.append(tweet['full_text'])
+        infile.close
 
-    df = pd.DataFrame.from_dict({'tweet_id': tweet_id_arr, 'user_id': usr_id_arr, 'screen_name': screen_name_arr,
-                                 'lang': lang_arr, 'created_at': created_at_arr, 'full_text': full_text_arr})
+        df = pd.DataFrame.from_dict({'tweet_id': tweet_id_arr, 'user_id': usr_id_arr, 'screen_name': screen_name_arr,
+                                     'lang': lang_arr, 'created_at': created_at_arr, 'full_text': full_text_arr})
 
-    keyword_str = '|'.join(keywords)
-    selected_tweets = df[df['full_text'].str.contains(keyword_str, flags=re.IGNORECASE, na=False, regex=True)]
-    return selected_tweets
+        keyword_str = '|'.join(keywords)
+        print('keywords = ', keyword_str)
+        selected_tweets = df[df['full_text'].str.contains(keyword_str, flags=re.IGNORECASE, na=False, regex=True)]
+        return selected_tweets
+    except Exception as e:
+        print(e)
+        return None
 
 
 def extract_tweets(raw_tweet_path, keyword_filename, save_path, tracking_filename):
@@ -96,6 +103,9 @@ def extract_tweets(raw_tweet_path, keyword_filename, save_path, tracking_filenam
             continue
         selected_tweets = extract_from_file(filename, keywords)
         print('\t extract {} tweets'.format(selected_tweets.shape[0]))
+        if selected_tweets is None:
+            # there is something wrong with the file, just ignore it for now
+            continue
         if extracted_tweets is None:
             extracted_tweets = selected_tweets
         else:
@@ -104,7 +114,7 @@ def extract_tweets(raw_tweet_path, keyword_filename, save_path, tracking_filenam
         processed_files.append(filename)
 
         #
-        if extracted_tweets.shape[0] >= 1000:
+        if extracted_tweets.shape[0] >= 50000:
             extracted_tweets.to_pickle('{}/{}.pkl'.format(save_path, save_count))
             #
             track = open(tracking_filename, 'a+')
@@ -116,10 +126,19 @@ def extract_tweets(raw_tweet_path, keyword_filename, save_path, tracking_filenam
             processed_files = []
             save_count += 1
 
+    # last processed files
+    if extracted_tweets is not None:
+        extracted_tweets.to_pickle('{}/{}.pkl'.format(save_path, save_count))
+        #
+        track = open(tracking_filename, 'a+')
+        for f in processed_files:
+            track.write(f + '\n')
+        track.close()
 
-raw_tweet_directory = '/dstore/home/hoang/mirror/data/tweets/eu_core_users_top_followers'
+
+raw_tweet_directory = '/home/hoang/data/tweets/eu_core_users_top_followers'
 keyword_filename = 'selected_keywords.txt'
-save_directory = '/dstore/home/hoang/mirror/extracted_tweets'
+save_directory = '/home/hoang/mirror/extracted_tweets'
 tracking_filename = 'tweet_extraction_tracking.txt'
 
 extract_tweets(raw_tweet_directory, keyword_filename, save_directory, tracking_filename)
