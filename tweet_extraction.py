@@ -1,32 +1,125 @@
 # scripts for extracting tweets containing some keyword
+import glob
+import pandas as pd
+import pickle
+import re
 
 
-def extract_from_file(raw_tweet_file, keywords, path_2_save):
+def read_keywords(keyword_filename):
     """
-    extracting tweets in raw_tweet_file that contain any of the keyword
-
-    :param raw_tweet_file:
-    :param keywords:
-    :param path_2_save:
+    read the keywords from file
+    :param keyword_filename: file that contains keywords
     :return:
     """
+    file = open(keyword_filename)
+    keywords = []
+    for line in file:
+        keywords.append(line.strip())
+    file.close()
+    return keywords
 
 
-def extract_tweets(raw_tweet_directory, keywords, save_directory):
+def read_previousley_processed_files(tracking_filename):
     """
-
-    :param raw_tweet_directory:
-    :param keywords:
-    :param save_directory:
+    read list of files that were previously processed
+    :param tracking_filename: file that contains list of previously processed
     :return:
     """
-    # https://stackoverflow.com/questions/3207219/how-do-i-list-all-files-of-a-directory
-    # for each file_name in raw_tweet_directory:
-    #     extract_from_file(raw_tweet_directory/file_name, keywords,  save_directory/file_name)
+    processed_files = []
+    file = open(tracking_filename)
+    for line in file:
+        processed_files.append(line.strip())
+    file.close()
+    return processed_files
 
 
-raw_tweet_directory = "directory_of_the_raw_dataset"
-keywords = "list of keywords"
-save_directory = "directory to save the selected tweets"
+def extract_from_file(tweet_filename, keywords):
+    """
+    extracting tweets in tweet_filename that contain any of the keyword
 
-extract_tweets(raw_tweet_directory, keywords, save_directory)
+    :param tweet_filename:
+    :param keywords:
+    :return:
+    """
+    tweet_id_arr = []
+    created_at_arr = []
+    lang_arr = []
+    full_text_arr = []
+    usr_id_arr = []
+    screen_name_arr = []
+
+    infile = open(tweet_filename, 'rb')
+    user_tweets = pickle.load(infile)
+    for user, tweets in user_tweets.items():
+        for tweet in tweets:
+            tweet_id_arr.append(tweet['id'])
+            usr_id_arr.append(tweet['user']['id'])
+            screen_name_arr.append(tweet['user']['screen_name'])
+            lang_arr.append(tweet['lang'])
+            created_at_arr.append(tweet['created_at'])
+            full_text_arr.append(tweet['full_text'])
+    infile.close
+
+    df = pd.DataFrame.from_dict({'tweet_id': tweet_id_arr, 'user_id': usr_id_arr, 'screen_name': screen_name_arr,
+                                 'lang': lang_arr, 'created_at': created_at_arr, 'full_text': full_text_arr})
+
+    keyword_str = '|'.join(keywords)
+    selected_tweets = df[df['full_text'].str.contains(keyword_str, flags=re.IGNORECASE, na=False, regex=True)]
+    return selected_tweets
+
+
+def extract_tweets(raw_tweet_path, keyword_filename, save_path, tracking_filename):
+    """
+    
+    :param raw_tweet_path:
+    :param keyword_filename:
+    :param save_path:
+    :param tracking_filename:
+    :return:
+    """
+    raw_files = glob.glob('{}/*.pkl'.format(raw_tweet_path))  # get list of .pkl files
+    keywords = read_keywords(keyword_filename)
+
+    # get list of previously processed files
+    previously_processed_files = read_previousley_processed_files(tracking_filename)
+    # turn into set for faster membership checking
+    previously_processed_files = set(previously_processed_files)
+
+    extracted_tweets = None
+    processed_files = []
+    save_count = 0
+
+    for filename in raw_files:
+        print('processing file {}'.format(filename))
+        if filename in previously_processed_files:
+            # ignore the files that were previously processed
+            continue
+        selected_tweets = extract_from_file(filename, keywords)
+        print('\t extract {} tweets'.format(selected_tweets.shape[0]))
+        if extracted_tweets is None:
+            extracted_tweets = selected_tweets
+        else:
+            extracted_tweets = pd.concat([extracted_tweets, selected_tweets], axis=0)
+        #
+        processed_files.append(filename)
+
+        #
+        if extracted_tweets.shape[0] >= 1000:
+            extracted_tweets.to_pickle('{}/{}.pkl'.format(save_path, save_count))
+            #
+            track = open(tracking_filename, 'a+')
+            for f in processed_files:
+                track.write(f + '\n')
+            track.close()
+            # restart the containers
+            extracted_tweets = None
+            processed_files = []
+            save_count += 1
+
+
+raw_tweet_directory = '/dstore/home/hoang/mirror/data/tweets/eu_core_users_top_followers'
+keyword_filename = 'selected_keywords.txt'
+save_directory = '/dstore/home/hoang/mirror/extracted_tweets'
+tracking_filename = 'tweet_extraction_tracking.txt'
+
+extract_tweets(raw_tweet_directory, keyword_filename, save_directory, tracking_filename)
