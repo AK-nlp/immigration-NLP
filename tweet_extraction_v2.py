@@ -135,10 +135,10 @@ def extract_tweets(raw_tweet_path, keyword_filename, save_path, tracking_filenam
             track.write(f + '\n')
         track.close()
 
-
+/dstore/home/hoang/mirror/data/tweets/eu_core_users_top_followers/
 raw_tweet_directory = '/home/hoang/data/tweets/eu_core_users_top_followers'
 keyword_filename = 'selected_keywords.txt'
-save_directory = '/home/hoang/mirror/extracted_tweets'
+save_directory = '/home/khatua/mirror/extracted_tweets'
 tracking_filename = 'tweet_extraction_tracking.txt'
 
 extract_tweets(raw_tweet_directory, keyword_filename, save_directory, tracking_filename)
